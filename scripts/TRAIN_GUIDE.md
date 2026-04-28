@@ -112,3 +112,48 @@ If you see `FrameTimestampError`, increase tolerance: `--tolerance_s=0.05`
 
 ### Missing Stats Error
 If you see `KeyError: 'observation.images.image_top'`, disable ImageNet stats: `--dataset.use_imagenet_stats=false`
+
+## Parallel Training on Multiple GPUs
+
+### Hardware Setup
+- 2x NVIDIA RTX 4070 (12GB each)
+- Each GPU trains one model independently
+
+### Training Schedule
+The parallel training script runs 5 models across 2 GPUs:
+
+| Round | GPU 0 | GPU 1 |
+|-------|-------|-------|
+| 1 | mixed_fwd_bwdrev_1_9 | mixed_fwd_bwdrev_3_7 |
+| 2 | mixed_fwd_bwdrev_5_5 | mixed_fwd_bwdrev_7_3 |
+| 3 | mixed_fwd_bwdrev_9_1 | (idle) |
+
+### Run Parallel Training
+```bash
+cd /home/rogerspyke/projects/TRaDA/third_party/lerobot
+./scripts/run_parallel_training.sh
+```
+
+### Training Configuration
+- Steps: 30,000 per model
+- Checkpoint: Every 10,000 steps
+- Batch size: 8 per GPU
+- Output: `/home/rogerspyke/projects/TRaDA-data-real/models/`
+- Logs: `/home/rogerspyke/projects/TRaDA-data-real/training_logs/`
+
+### Monitor Training
+```bash
+# Watch GPU usage
+watch -n 1 nvidia-smi
+
+# Check training logs
+tail -f /home/rogerspyke/projects/TRaDA-data-real/training_logs/*.log
+```
+
+### Resume Interrupted Training
+If training is interrupted, resume from the last checkpoint:
+```bash
+uv run lerobot-train \
+    --config_path=<output_dir>/checkpoints/<checkpoint_dir>/train_config.json \
+    --resume=true
+```
