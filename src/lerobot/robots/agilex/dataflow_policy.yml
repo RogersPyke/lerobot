@@ -1,0 +1,124 @@
+# Dora Dataflow Configuration for Agilex Cobot Magic with ACT Policy
+#
+# This dataflow runs on the robot's onboard computer and includes:
+# - 3 RealSense cameras (top, right, left)
+# - 2 Piper arm controllers (right, left)
+# - 1 ACT policy inference node
+# - 1 robot state merger node
+#
+# Camera Serial Numbers:
+#   - Top: 344422071988 (D455)
+#   - Right: 338622071868 (D435)
+#   - Left: 339522300665 (D435)
+#
+# CAN Buses:
+#   - Right arm: can_right
+#   - Left arm: can_left
+#
+# State Structure (26 DOF):
+#   [0:7]   - Right arm joints [0:6] + gripper [6]
+#   [7:13]  - Right arm end effector pose (x, y, z, rx, ry, rz)
+#   [13:20] - Left arm joints [0:6] + gripper [6]
+#   [20:26] - Left arm end effector pose (x, y, z, rx, ry, rz)
+
+name: agilex_aloha_policy
+version: "1.0"
+
+nodes:
+  # ==================== Camera Nodes ====================
+  - id: camera_top
+    path: dora-camera-realsense
+    inputs:
+      tick: dora/timer_100ms
+    outputs:
+      - image
+    env:
+      DEVICE_SERIAL: "344422071988"
+      IMAGE_HEIGHT: "480"
+      IMAGE_WIDTH: "640"
+      ENCODING: "rgb8"
+      FLIP: "0"
+
+  - id: camera_right
+    path: dora-camera-realsense
+    inputs:
+      tick: dora/timer_100ms
+    outputs:
+      - image
+    env:
+      DEVICE_SERIAL: "338622071868"
+      IMAGE_HEIGHT: "480"
+      IMAGE_WIDTH: "640"
+      ENCODING: "rgb8"
+      FLIP: "0"
+
+  - id: camera_left
+    path: dora-camera-realsense
+    inputs:
+      tick: dora/timer_100ms
+    outputs:
+      - image
+    env:
+      DEVICE_SERIAL: "339522300665"
+      IMAGE_HEIGHT: "480"
+      IMAGE_WIDTH: "640"
+      ENCODING: "rgb8"
+      FLIP: "0"
+
+  # ==================== Arm Nodes ====================
+  - id: arm_right
+    path: dora-arm-piper
+    inputs:
+      action_joint: policy/action_right_joint
+      action_gripper: policy/action_right_gripper
+      tick: dora/timer_50ms
+    outputs:
+      - follower_jointstate
+      - follower_endpose
+    env:
+      TEACH_MODE: "0"
+      CAN_BUS: "can_right"
+
+  - id: arm_left
+    path: dora-arm-piper
+    inputs:
+      action_joint: policy/action_left_joint
+      action_gripper: policy/action_left_gripper
+      tick: dora/timer_50ms
+    outputs:
+      - follower_jointstate
+      - follower_endpose
+    env:
+      TEACH_MODE: "0"
+      CAN_BUS: "can_left"
+
+  # ==================== State Merger Node ====================
+  - id: state_merger
+    path: dora-state-merger
+    inputs:
+      right_joint: arm_right/follower_jointstate
+      right_endpose: arm_right/follower_endpose
+      left_joint: arm_left/follower_jointstate
+      left_endpose: arm_left/follower_endpose
+    outputs:
+      - robot_state
+
+  # ==================== Policy Node ====================
+  - id: policy
+    path: dora-policy-act
+    inputs:
+      image_top: camera_top/image
+      image_left: camera_left/image
+      image_right: camera_right/image
+      robot_state: state_merger/robot_state
+    outputs:
+      - action_right_joint
+      - action_right_gripper
+      - action_left_joint
+      - action_left_gripper
+    env:
+      POLICY_PATH: "/home/agilex/policies/act_policy"
+      DEVICE: "cuda:0"
+      CONTROL_FREQ: "30.0"
+      IMAGE_HEIGHT: "480"
+      IMAGE_WIDTH: "640"
